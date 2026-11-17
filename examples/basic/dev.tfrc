@@ -1,0 +1,9 @@
+# Use the locally built provider without publishing it to a registry:
+#   export TF_CLI_CONFIG_FILE=$PWD/dev.tfrc
+# Replace the path with the output of `go env GOPATH`/bin.
+provider_installation {
+  dev_overrides {
+    "vfc/databricks-metricview" = "/home/<user>/go/bin"
+  }
+  direct {}
+}
