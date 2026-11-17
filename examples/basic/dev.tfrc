@@ -3,7 +3,7 @@
 # Replace the path with the output of `go env GOPATH`/bin.
 provider_installation {
   dev_overrides {
-    "vfc/databricks-metricview" = "/home/<user>/go/bin"
+    "mateuszboryn/databricks-metricview" = "/home/<user>/go/bin"
   }
   direct {}
 }

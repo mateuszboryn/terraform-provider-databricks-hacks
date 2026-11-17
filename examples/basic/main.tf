@@ -5,7 +5,7 @@ terraform {
     # If you also use the official databricks/databricks provider in the same module,
     # give this one another local name (e.g. "dbx_mv") and add `provider = dbx_mv` to each resource.
     databricks = {
-      source = "vfc/databricks-metricview"
+      source = "mateuszboryn/databricks-metricview"
     }
   }
 }
