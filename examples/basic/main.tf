@@ -1,37 +1,48 @@
 terraform {
   required_version = ">= 1.5"
   required_providers {
-    # Local name "databricks" => resource type databricks_metric_view.
-    # If you also use the official databricks/databricks provider in the same module,
-    # give this one another local name (e.g. "dbx_mv") and add `provider = dbx_mv` to each resource.
     databricks = {
-      source = "mateuszboryn/databricks-metricview"
+      source  = "databricks/databricks"
+      version = "~> 1.132"
+    }
+    databricks-hacks = {
+      source = "mateuszboryn/databricks-hacks"
     }
   }
 }
 
 provider "databricks" {
-  host         = var.databricks_host
-  warehouse_id = var.warehouse_id
-  # Auth: DATABRICKS_TOKEN env var, `profile = "..."`, Azure CLI login, etc. (Databricks unified auth)
+  host = var.databricks_host
 }
 
-locals {
-  prefix = "${var.catalog}.${var.schema}"
+provider "databricks-hacks" {
+  host = var.databricks_host
+}
+
+data "databricks_sql_warehouse" "sql" {
+  name = var.warehouse_name
 }
 
 # 1) Definition kept in a separate YAML file (recommended)
-resource "databricks_metric_view" "inventory_snapshot" {
-  name       = "${local.prefix}.tf_mv_inventory_snapshot"
-  definition = templatefile("${path.module}/metric_views/inventory_snapshot.yaml", {
+resource "databricks_metric_view" "sample_1" {
+  provider     = databricks-hacks
+  warehouse_id = data.databricks_sql_warehouse.sql.id
+  catalog_name = var.catalog
+  schema_name  = var.schema
+  name         = "tf_mv_sample_1"
+  definition = templatefile("${path.module}/metric_views/sample_1.yaml", {
     catalog = var.catalog
   })
 }
 
 # 2) Inline definition
-resource "databricks_metric_view" "brand_stock" {
-  name       = "${local.prefix}.tf_mv_brand_stock"
-  definition = <<-YAML
+resource "databricks_metric_view" "sample_2" {
+  provider     = databricks-hacks
+  warehouse_id = data.databricks_sql_warehouse.sql.id
+  catalog_name = var.catalog
+  schema_name  = var.schema
+  name         = "tf_mv_sample_2"
+  definition   = <<-YAML
     version: 1.1
     comment: Stock by brand (managed by Terraform)
     source: ${var.catalog}.warehouse_b2b.fact_inventory_snapshot
@@ -52,7 +63,7 @@ resource "databricks_metric_view" "brand_stock" {
 
 output "metric_views" {
   value = [
-    databricks_metric_view.inventory_snapshot.id,
-    databricks_metric_view.brand_stock.id,
+    databricks_metric_view.sample_1.id,
+    databricks_metric_view.sample_2.id,
   ]
 }

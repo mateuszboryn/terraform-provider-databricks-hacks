@@ -1,9 +1,9 @@
 # Use the locally built provider without publishing it to a registry:
 #   export TF_CLI_CONFIG_FILE=$PWD/dev.tfrc
-# Replace the path with the output of `go env GOPATH`/bin.
+# Point this path at the directory containing terraform-provider-databricks-hacks.
 provider_installation {
   dev_overrides {
-    "mateuszboryn/databricks-metricview" = "/home/<user>/go/bin"
+    "mateuszboryn/databricks-hacks" = "<absolute-path-to-repository-root>"
   }
   direct {}
 }

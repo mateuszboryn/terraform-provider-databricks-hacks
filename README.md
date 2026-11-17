@@ -6,21 +6,26 @@ Terraform provider (plugin framework, Go) with one resource: `databricks_metric_
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `name` | yes | `catalog.schema.view_name`. Changing it destroys and recreates the view. |
+| `warehouse_id` | yes | SQL warehouse ID used to create, update, and delete this view. |
+| `catalog_name` | yes | Unity Catalog catalog containing the metric view. Changing it destroys and recreates the view. |
+| `schema_name` | yes | Schema containing the metric view. Changing it destroys and recreates the view. |
+| `name` | yes | Metric view name within the schema. Changing it destroys and recreates the view. |
 | `definition` | yes | Metric view YAML (the body between `$$ ... $$`). |
-| `id` | computed | Same as `name`. |
+| `id` | computed | Fully qualified name: `catalog.schema.name`. |
 
-Provider arguments: `host`, `token`, `profile` (all optional, Databricks unified auth), `warehouse_id` (or env `DATABRICKS_WAREHOUSE_ID`).
+Provider arguments: `host`, `token`, and `profile` are optional and use Databricks unified authentication, including environment variables and configured profiles. The provider does not require a SQL warehouse during initialization.
 
 ## Lifecycle
 
 | Terraform action | What runs in Databricks |
 | --- | --- |
-| Create | `CREATE VIEW <name> WITH METRICS LANGUAGE YAML AS $$ <definition> $$` (SQL warehouse) |
-| Read / refresh | `GET /api/2.1/unity-catalog/tables/<name>` and reads `view_definition`. If the view is missing, it is removed from state, so the next apply recreates it. |
-| Update | `ALTER VIEW <name> AS $$ <definition> $$`. This keeps grants and tags, which `CREATE OR REPLACE` would drop. |
-| Delete | `DROP VIEW IF EXISTS <name>` |
+| Create | `CREATE VIEW <catalog.schema.name> WITH METRICS LANGUAGE YAML AS $$ <definition> $$` (the resource's SQL warehouse) |
+| Read / refresh | `GET /api/2.1/unity-catalog/tables/<catalog.schema.name>` and reads `view_definition`. If the view is missing, it is removed from state, so the next apply recreates it. |
+| Update | `ALTER VIEW <catalog.schema.name> AS $$ <definition> $$` on the resource's SQL warehouse. This keeps grants and tags, which `CREATE OR REPLACE` would drop. |
+| Delete | `DROP VIEW IF EXISTS <catalog.schema.name>` on the resource's SQL warehouse |
 | Import | `terraform import databricks_metric_view.x catalog.schema.view_name` |
+
+Changing `warehouse_id` updates the resource's warehouse setting without replacing the view. Changes to the catalog, schema, or view name replace it. Imports keep the `catalog.schema.name` ID format; configure `warehouse_id` on the resource before importing.
 
 ## Change detection (normalized YAML diff)
 
@@ -50,6 +55,10 @@ Requirements: Go 1.22+, Terraform 1.5+.
 ```
 
 Then use `examples/basic` (see its README).
+
+## Migration from provider-level warehouse configuration
+
+Remove `warehouse_id` from the provider block and add it to each `databricks_metric_view` resource. Split each previous three-part `name` into `catalog_name`, `schema_name`, and the final `name` component. Existing IDs and import IDs remain `catalog.schema.name`.
 
 ## Layout
 

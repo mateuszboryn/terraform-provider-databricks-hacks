@@ -20,10 +20,10 @@ builds:
   goos:
     - windows
     - linux
-#    - darwin
+    - darwin
   goarch:
     - amd64
-    - arm
+#    - arm
     - arm64
   ignore:
     - goos: linux

@@ -32,9 +32,12 @@ type metricViewResource struct {
 }
 
 type metricViewModel struct {
-	ID         types.String `tfsdk:"id"`
-	Name       types.String `tfsdk:"name"`
-	Definition YAMLValue    `tfsdk:"definition"`
+	ID          types.String `tfsdk:"id"`
+	WarehouseID types.String `tfsdk:"warehouse_id"`
+	CatalogName types.String `tfsdk:"catalog_name"`
+	SchemaName  types.String `tfsdk:"schema_name"`
+	Name        types.String `tfsdk:"name"`
+	Definition  YAMLValue    `tfsdk:"definition"`
 }
 
 func (r *metricViewResource) Metadata(_ context.Context, _ resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -50,11 +53,28 @@ func (r *metricViewResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description:   "Full name of the metric view (catalog.schema.name).",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			"warehouse_id": schema.StringAttribute{
+				Required:    true,
+				Description: "SQL warehouse ID used to create, update, and delete this metric view.",
+				Validators:  []validator.String{namePartValidator{}},
+			},
+			"catalog_name": schema.StringAttribute{
+				Required:      true,
+				Description:   "Unity Catalog catalog containing the metric view. Changing it recreates the view.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Validators:    []validator.String{namePartValidator{}},
+			},
+			"schema_name": schema.StringAttribute{
+				Required:      true,
+				Description:   "Schema containing the metric view. Changing it recreates the view.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Validators:    []validator.String{namePartValidator{}},
+			},
 			"name": schema.StringAttribute{
 				Required:      true,
-				Description:   "Three-level name: catalog.schema.view_name. Changing it recreates the view.",
+				Description:   "Metric view name. Changing it recreates the view.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
-				Validators:    []validator.String{fullNameValidator{}},
+				Validators:    []validator.String{namePartValidator{}},
 			},
 			"definition": schema.StringAttribute{
 				Required:    true,
@@ -87,14 +107,15 @@ func (r *metricViewResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
+	fullName := metricViewFullName(plan)
 	stmt := fmt.Sprintf("CREATE VIEW %s\nWITH METRICS\nLANGUAGE YAML\nAS $$\n%s\n$$",
-		quoteFullName(plan.Name.ValueString()), plan.Definition.ValueString())
-	if err := r.client.execSQL(ctx, stmt); err != nil {
-		resp.Diagnostics.AddError("Failed to create metric view "+plan.Name.ValueString(), err.Error())
+		quoteFullName(fullName), plan.Definition.ValueString())
+	if err := r.client.execSQL(ctx, plan.WarehouseID.ValueString(), stmt); err != nil {
+		resp.Diagnostics.AddError("Failed to create metric view "+fullName, err.Error())
 		return
 	}
 
-	plan.ID = plan.Name
+	plan.ID = types.StringValue(fullName)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -105,26 +126,27 @@ func (r *metricViewResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	info, err := r.client.w.Tables.Get(ctx, catalog.GetTableRequest{FullName: state.Name.ValueString()})
+	fullName := metricViewFullName(state)
+	info, err := r.client.w.Tables.Get(ctx, catalog.GetTableRequest{FullName: fullName})
 	if err != nil {
 		if errors.Is(err, apierr.ErrNotFound) {
 			// deleted outside Terraform -> plan will recreate it
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		resp.Diagnostics.AddError("Failed to read metric view "+state.Name.ValueString(), err.Error())
+		resp.Diagnostics.AddError("Failed to read metric view "+fullName, err.Error())
 		return
 	}
 	if string(info.TableType) != "METRIC_VIEW" {
 		resp.Diagnostics.AddError("Object is not a metric view",
-			fmt.Sprintf("%s has table_type %s", state.Name.ValueString(), info.TableType))
+			fmt.Sprintf("%s has table_type %s", fullName, info.TableType))
 		return
 	}
 
 	// Store the workspace YAML. If it is only re-formatted, semantic equality keeps the
 	// prior state value; if it was changed in the workspace, the next plan shows an update.
 	state.Definition = NewYAMLValue(info.ViewDefinition)
-	state.ID = state.Name
+	state.ID = types.StringValue(fullName)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -136,14 +158,15 @@ func (r *metricViewResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// ALTER VIEW keeps grants / tags (CREATE OR REPLACE would drop them).
+	fullName := metricViewFullName(plan)
 	stmt := fmt.Sprintf("ALTER VIEW %s AS $$\n%s\n$$",
-		quoteFullName(plan.Name.ValueString()), plan.Definition.ValueString())
-	if err := r.client.execSQL(ctx, stmt); err != nil {
-		resp.Diagnostics.AddError("Failed to update metric view "+plan.Name.ValueString(), err.Error())
+		quoteFullName(fullName), plan.Definition.ValueString())
+	if err := r.client.execSQL(ctx, plan.WarehouseID.ValueString(), stmt); err != nil {
+		resp.Diagnostics.AddError("Failed to update metric view "+fullName, err.Error())
 		return
 	}
 
-	plan.ID = plan.Name
+	plan.ID = types.StringValue(fullName)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -153,13 +176,21 @@ func (r *metricViewResource) Delete(ctx context.Context, req resource.DeleteRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.client.execSQL(ctx, "DROP VIEW IF EXISTS "+quoteFullName(state.Name.ValueString())); err != nil {
-		resp.Diagnostics.AddError("Failed to delete metric view "+state.Name.ValueString(), err.Error())
+	fullName := metricViewFullName(state)
+	if err := r.client.execSQL(ctx, state.WarehouseID.ValueString(), "DROP VIEW IF EXISTS "+quoteFullName(fullName)); err != nil {
+		resp.Diagnostics.AddError("Failed to delete metric view "+fullName, err.Error())
 	}
 }
 
 func (r *metricViewResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), req.ID)...)
+	parts, ok := splitFullName(req.ID)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid metric view import ID", "Expected catalog.schema.name, got: "+req.ID)
+		return
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("catalog_name"), parts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("schema_name"), parts[1])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), parts[2])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 }
 
@@ -180,13 +211,21 @@ func (r *metricViewResource) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 	resp.Diagnostics.AddWarning(
-		"Metric view definition change: "+plan.Name.ValueString(),
+		"Metric view definition change: "+metricViewFullName(plan),
 		"Normalized YAML diff (- workspace/state, + configuration):\n\n"+diff)
 }
 
 // ---------- helpers ----------
 
 var namePartRe = regexp.MustCompile("^[^.`]+$")
+
+func metricViewFullName(model metricViewModel) string {
+	return strings.Join([]string{
+		model.CatalogName.ValueString(),
+		model.SchemaName.ValueString(),
+		model.Name.ValueString(),
+	}, ".")
+}
 
 func splitFullName(name string) ([]string, bool) {
 	parts := strings.Split(name, ".")
@@ -210,19 +249,20 @@ func quoteFullName(name string) string {
 	return strings.Join(parts, ".")
 }
 
-type fullNameValidator struct{}
+type namePartValidator struct{}
 
-func (fullNameValidator) Description(_ context.Context) string {
-	return "must be catalog.schema.name without backticks"
+func (namePartValidator) Description(_ context.Context) string {
+	return "must be a non-empty identifier without dots or backticks"
 }
-func (v fullNameValidator) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
-func (fullNameValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+func (v namePartValidator) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+func (namePartValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
 	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
 		return
 	}
-	if _, ok := splitFullName(req.ConfigValue.ValueString()); !ok {
-		resp.Diagnostics.AddAttributeError(req.Path, "Invalid metric view name",
-			"Expected three-level name catalog.schema.view_name (no backticks), got: "+req.ConfigValue.ValueString())
+	value := req.ConfigValue.ValueString()
+	if strings.TrimSpace(value) == "" || !namePartRe.MatchString(value) {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid metric view identifier",
+			"Expected a non-empty identifier without dots or backticks, got: "+value)
 	}
 }
 

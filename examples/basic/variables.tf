@@ -3,8 +3,8 @@ variable "databricks_host" {
   type        = string
 }
 
-variable "warehouse_id" {
-  description = "SQL warehouse ID used to run CREATE / ALTER / DROP VIEW"
+variable "warehouse_name" {
+  description = "Name of the SQL warehouse looked up by the official Databricks provider"
   type        = string
 }
 

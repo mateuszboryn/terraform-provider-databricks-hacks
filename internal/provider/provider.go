@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/databricks/databricks-sdk-go"
@@ -24,16 +24,14 @@ type metricViewProvider struct {
 }
 
 type providerModel struct {
-	Host        types.String `tfsdk:"host"`
-	Token       types.String `tfsdk:"token"`
-	Profile     types.String `tfsdk:"profile"`
-	WarehouseID types.String `tfsdk:"warehouse_id"`
+	Host    types.String `tfsdk:"host"`
+	Token   types.String `tfsdk:"token"`
+	Profile types.String `tfsdk:"profile"`
 }
 
 // clientData is handed to resources via ProviderData.
 type clientData struct {
-	w           *databricks.WorkspaceClient
-	warehouseID string
+	w *databricks.WorkspaceClient
 }
 
 func New(version string) func() provider.Provider {
@@ -65,10 +63,6 @@ func (p *metricViewProvider) Schema(_ context.Context, _ provider.SchemaRequest,
 				Optional:    true,
 				Description: "Profile name from ~/.databrickscfg.",
 			},
-			"warehouse_id": schema.StringAttribute{
-				Optional:    true,
-				Description: "SQL warehouse used to run CREATE / ALTER / DROP VIEW. Falls back to DATABRICKS_WAREHOUSE_ID.",
-			},
 		},
 	}
 }
@@ -86,23 +80,13 @@ func (p *metricViewProvider) Configure(ctx context.Context, req provider.Configu
 		Profile: cfg.Profile.ValueString(),
 	}
 
-	warehouseID := cfg.WarehouseID.ValueString()
-	if warehouseID == "" {
-		warehouseID = os.Getenv("DATABRICKS_WAREHOUSE_ID")
-	}
-	if warehouseID == "" {
-		resp.Diagnostics.AddError("Missing warehouse_id",
-			"Set provider attribute warehouse_id or env var DATABRICKS_WAREHOUSE_ID.")
-		return
-	}
-
 	w, err := databricks.NewWorkspaceClient(dbCfg)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to create Databricks client", err.Error())
 		return
 	}
 
-	c := &clientData{w: w, warehouseID: warehouseID}
+	c := &clientData{w: w}
 	resp.ResourceData = c
 	resp.DataSourceData = c
 }
@@ -115,10 +99,13 @@ func (p *metricViewProvider) DataSources(_ context.Context) []func() datasource.
 	return nil
 }
 
-// execSQL runs a statement on the configured SQL warehouse and waits for completion.
-func (c *clientData) execSQL(ctx context.Context, statement string) error {
+// execSQL runs a statement on the requested SQL warehouse and waits for completion.
+func (c *clientData) execSQL(ctx context.Context, warehouseID, statement string) error {
+	if strings.TrimSpace(warehouseID) == "" {
+		return fmt.Errorf("warehouse_id must not be empty")
+	}
 	resp, err := c.w.StatementExecution.ExecuteStatement(ctx, sql.ExecuteStatementRequest{
-		WarehouseId:   c.warehouseID,
+		WarehouseId:   warehouseID,
 		Statement:     statement,
 		WaitTimeout:   "30s",
 		OnWaitTimeout: sql.ExecuteStatementRequestOnWaitTimeoutContinue,
