@@ -17,8 +17,8 @@ import (
 
 var _ provider.Provider = &metricViewProvider{}
 
-// metricViewProvider exposes the databricks_metric_view resource.
-// Provider type name is "databricks" so the resource is called databricks_metric_view.
+// metricViewProvider exposes the provider's custom Databricks resources.
+// Provider type name is "databricks" so resources use the databricks_ prefix.
 type metricViewProvider struct {
 	version string
 }
@@ -47,7 +47,7 @@ func (p *metricViewProvider) Metadata(_ context.Context, _ provider.MetadataRequ
 
 func (p *metricViewProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages Unity Catalog metric views. Authentication uses Databricks unified auth " +
+		Description: "Manages custom Unity Catalog resources. Authentication uses Databricks unified auth " +
 			"(DATABRICKS_HOST / DATABRICKS_TOKEN env vars, ~/.databrickscfg profiles, Azure CLI, OAuth, ...).",
 		Attributes: map[string]schema.Attribute{
 			"host": schema.StringAttribute{
@@ -92,7 +92,7 @@ func (p *metricViewProvider) Configure(ctx context.Context, req provider.Configu
 }
 
 func (p *metricViewProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewMetricViewResource}
+	return []func() resource.Resource{NewMetricViewResource, NewMaterializedViewResource}
 }
 
 func (p *metricViewProvider) DataSources(_ context.Context) []func() datasource.DataSource {
@@ -101,8 +101,14 @@ func (p *metricViewProvider) DataSources(_ context.Context) []func() datasource.
 
 // execSQL runs a statement on the requested SQL warehouse and waits for completion.
 func (c *clientData) execSQL(ctx context.Context, warehouseID, statement string) error {
+	_, err := c.execSQLWithResult(ctx, warehouseID, statement)
+	return err
+}
+
+// execSQLWithResult runs a statement on the requested warehouse and returns its result rows.
+func (c *clientData) execSQLWithResult(ctx context.Context, warehouseID, statement string) (*sql.StatementResponse, error) {
 	if strings.TrimSpace(warehouseID) == "" {
-		return fmt.Errorf("warehouse_id must not be empty")
+		return nil, fmt.Errorf("warehouse_id must not be empty")
 	}
 	resp, err := c.w.StatementExecution.ExecuteStatement(ctx, sql.ExecuteStatementRequest{
 		WarehouseId:   warehouseID,
@@ -111,33 +117,33 @@ func (c *clientData) execSQL(ctx context.Context, warehouseID, statement string)
 		OnWaitTimeout: sql.ExecuteStatementRequestOnWaitTimeoutContinue,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for {
 		if resp.Status == nil {
-			return fmt.Errorf("statement %s returned no status", resp.StatementId)
+			return nil, fmt.Errorf("statement %s returned no status", resp.StatementId)
 		}
 		switch resp.Status.State {
 		case sql.StatementStateSucceeded:
-			return nil
+			return resp, nil
 		case sql.StatementStateFailed, sql.StatementStateCanceled, sql.StatementStateClosed:
 			msg := string(resp.Status.State)
 			if resp.Status.Error != nil && resp.Status.Error.Message != "" {
 				msg = resp.Status.Error.Message
 			}
-			return fmt.Errorf("statement %s failed: %s", resp.StatementId, msg)
+			return nil, fmt.Errorf("statement %s failed: %s", resp.StatementId, msg)
 		}
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
 
 		resp, err = c.w.StatementExecution.GetStatement(ctx, sql.GetStatementRequest{StatementId: resp.StatementId})
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 }

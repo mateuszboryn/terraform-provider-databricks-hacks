@@ -8,7 +8,7 @@ description: |-
 
 # Databricks Hacks Provider
 
-Manages Databricks custom resources. The provider can be initialized with authentication settings only; SQL warehouse IDs are configured on individual metric view resources.
+Manages Databricks custom resources. The provider can be initialized with authentication settings only; SQL warehouse IDs are configured on resources that run SQL, including metric views and materialized views.
 
 ## Example Usage
 

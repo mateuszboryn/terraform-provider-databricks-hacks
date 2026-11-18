@@ -48,7 +48,7 @@ func TestMetricViewSchemaHasSeparateArguments(t *testing.T) {
 func TestExecSQLUsesRequestedWarehouse(t *testing.T) {
 	var warehouseIDs []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/api/2.0/sql/statements") {
+		if r.Method != http.MethodPost || !strings.HasSuffix(strings.TrimSuffix(r.URL.Path, "/"), "/api/2.0/sql/statements") {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 		var request struct {
