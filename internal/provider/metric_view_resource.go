@@ -22,7 +22,6 @@ var (
 	_ resource.Resource                = &metricViewResource{}
 	_ resource.ResourceWithConfigure   = &metricViewResource{}
 	_ resource.ResourceWithImportState = &metricViewResource{}
-	_ resource.ResourceWithModifyPlan  = &metricViewResource{}
 )
 
 func NewMetricViewResource() resource.Resource { return &metricViewResource{} }
@@ -55,7 +54,7 @@ func (r *metricViewResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"warehouse_id": schema.StringAttribute{
 				Required:    true,
-				Description: "SQL warehouse ID used to create, update, and delete this metric view.",
+				Description: "SQL warehouse ID used to create, read, update, and delete this metric view.",
 				Validators:  []validator.String{namePartValidator{}},
 			},
 			"catalog_name": schema.StringAttribute{
@@ -143,9 +142,23 @@ func (r *metricViewResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	// Store the workspace YAML. If it is only re-formatted, semantic equality keeps the
-	// prior state value; if it was changed in the workspace, the next plan shows an update.
-	state.Definition = NewYAMLValue(info.ViewDefinition)
+	// To read YAML definition, instead of using API, use SQL statement show create table to get YAML string. Then create YAMLValue.
+	// this is because API returns incomplete YAML.
+	statement, err := r.client.execSQLWithResult(ctx, state.WarehouseID.ValueString(), "SHOW CREATE TABLE "+quoteFullName(fullName))
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read metric view "+fullName, err.Error())
+		return
+	}
+	if statement.Result == nil || len(statement.Result.DataArray) == 0 || len(statement.Result.DataArray[0]) == 0 {
+		resp.Diagnostics.AddError("Failed to read metric view "+fullName, "SHOW CREATE TABLE returned no DDL")
+		return
+	}
+	definition, err := parseMetricViewDDL(statement.Result.DataArray[0][0])
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read metric view "+fullName, err.Error())
+		return
+	}
+	state.Definition = NewYAMLValue(definition)
 	state.ID = types.StringValue(fullName)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -194,30 +207,21 @@ func (r *metricViewResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 }
 
-// ModifyPlan prints a readable diff of the normalized YAML when an update is planned,
-// because Terraform's own diff shows the raw (differently formatted) strings.
-func (r *metricViewResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
-		return // create or destroy
-	}
-	var state, plan metricViewModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() || plan.Definition.IsUnknown() || plan.Definition.IsNull() {
-		return
-	}
-	diff, err := YAMLDiff(state.Definition.ValueString(), plan.Definition.ValueString())
-	if err != nil || diff == "" {
-		return
-	}
-	resp.Diagnostics.AddWarning(
-		"Metric view definition change: "+metricViewFullName(plan),
-		"Normalized YAML diff (- workspace/state, + configuration):\n\n"+diff)
-}
-
 // ---------- helpers ----------
 
 var namePartRe = regexp.MustCompile("^[^.`]+$")
+var metricViewDDLRe = regexp.MustCompile(`(?is)\bLANGUAGE\s+YAML\s+AS\s+\$\$(.*?)\$\$\s*;?\s*$`)
+
+func parseMetricViewDDL(ddl string) (string, error) {
+	match := metricViewDDLRe.FindStringSubmatch(ddl)
+	if match == nil || strings.TrimSpace(match[1]) == "" {
+		return "", fmt.Errorf("SHOW CREATE TABLE returned invalid metric view DDL")
+	}
+	if _, err := NormalizeYAML(match[1]); err != nil {
+		return "", fmt.Errorf("SHOW CREATE TABLE returned invalid metric view YAML: %w", err)
+	}
+	return match[1], nil
+}
 
 func metricViewFullName(model metricViewModel) string {
 	return strings.Join([]string{

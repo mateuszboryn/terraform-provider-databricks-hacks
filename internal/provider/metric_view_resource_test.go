@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -122,5 +123,79 @@ func TestMetricViewFullName(t *testing.T) {
 	}
 	if got := metricViewFullName(model); got != "catalog.schema.view" {
 		t.Fatalf("unexpected full name %q", got)
+	}
+}
+
+func TestMetricViewReadUsesShowCreate(t *testing.T) {
+	const yaml = "version: 1.1\nsource: sales\nmeasures:\n  - name: total\n    expr: SUM(amount)"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/unity-catalog/tables/"):
+			_, _ = w.Write([]byte(`{"table_type":"METRIC_VIEW","view_definition":"stale: true"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(strings.TrimSuffix(r.URL.Path, "/"), "/sql/statements"):
+			var request struct {
+				WarehouseID string `json:"warehouse_id"`
+				Statement   string `json:"statement"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode request: %v", err)
+			}
+			if request.WarehouseID != "warehouse-1" || request.Statement != "SHOW CREATE TABLE `main`.`analytics`.`daily view`" {
+				t.Errorf("unexpected SQL request: %#v", request)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"statement_id": "id", "status": map[string]any{"state": "SUCCEEDED"}, "result": map[string]any{"data_array": [][]string{{"CREATE VIEW main.analytics.`daily view` COMMENT 'AS $$ not the body' WITH METRICS LANGUAGE YAML AS $$\n" + yaml + "\n$$"}}}})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	client, err := databricks.NewWorkspaceClient(&databricks.Config{Host: server.URL, Token: "test-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &metricViewResource{client: &clientData{w: client}}
+	ctx := context.Background()
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	state := tfsdk.State{Schema: schemaResp.Schema}
+	model := metricViewModel{ID: types.StringValue("main.analytics.daily view"), WarehouseID: types.StringValue("warehouse-1"), CatalogName: types.StringValue("main"), SchemaName: types.StringValue("analytics"), Name: types.StringValue("daily view"), Definition: NewYAMLValue("old: true")}
+	if diags := state.Set(ctx, &model); diags.HasError() {
+		t.Fatal(diags)
+	}
+	resp := resource.ReadResponse{State: state}
+	r.Read(ctx, resource.ReadRequest{State: state}, &resp)
+	if len(resp.Diagnostics) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+	}
+	if diags := resp.State.Get(ctx, &model); diags.HasError() {
+		t.Fatal(diags)
+	}
+	if strings.TrimSpace(model.Definition.ValueString()) != yaml {
+		t.Fatalf("unexpected YAML: %q", model.Definition.ValueString())
+	}
+}
+
+func TestParseMetricViewDDL(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		ddl       string
+		want      string
+		wantError bool
+	}{
+		{name: "documented format", ddl: "CREATE VIEW x WITH METRICS\nLANGUAGE YAML\nAS $$\nversion: 1.1\nsource: sales\n$$", want: "\nversion: 1.1\nsource: sales\n"},
+		{name: "case and semicolon", ddl: "create view x with metrics language yaml as $$source: sales$$;", want: "source: sales"},
+		{name: "missing body", ddl: "CREATE VIEW x AS SELECT 1", wantError: true},
+		{name: "empty body", ddl: "LANGUAGE YAML AS $$  $$", wantError: true},
+		{name: "invalid yaml", ddl: "LANGUAGE YAML AS $$source: [$$", wantError: true},
+		{name: "unterminated body", ddl: "LANGUAGE YAML AS $$source: sales", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := parseMetricViewDDL(test.ddl)
+			if (err != nil) != test.wantError || got != test.want {
+				t.Fatalf("got %q, error %v; want %q, error %t", got, err, test.want, test.wantError)
+			}
+		})
 	}
 }

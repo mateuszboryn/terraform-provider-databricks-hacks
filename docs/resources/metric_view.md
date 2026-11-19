@@ -73,7 +73,7 @@ resource "databricks_metric_view" "example" {
 ## Lifecycle
 
 - Create runs `CREATE VIEW ... WITH METRICS LANGUAGE YAML` on `warehouse_id`.
-- Read refreshes the object through the Unity Catalog Tables API and reads its stored YAML definition.
+- Read checks the object through the Unity Catalog Tables API and reads its YAML definition using `SHOW CREATE TABLE` on `warehouse_id`.
 - Definition updates run `ALTER VIEW` on `warehouse_id`, preserving grants and tags.
 - Delete runs `DROP VIEW IF EXISTS` on `warehouse_id`.
 - Changes to `catalog_name`, `schema_name`, or `name` replace the resource. Changing `warehouse_id` does not replace the view.

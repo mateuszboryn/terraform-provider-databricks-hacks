@@ -20,7 +20,7 @@ Provider arguments: `host`, `token`, and `profile` are optional and use Databric
 | Terraform action | What runs in Databricks |
 | --- | --- |
 | Create | `CREATE VIEW <catalog.schema.name> WITH METRICS LANGUAGE YAML AS $$ <definition> $$` (the resource's SQL warehouse) |
-| Read / refresh | `GET /api/2.1/unity-catalog/tables/<catalog.schema.name>` and reads `view_definition`. If the view is missing, it is removed from state, so the next apply recreates it. |
+| Read / refresh | Checks the object through the Unity Catalog Tables API, then reads its YAML from `SHOW CREATE TABLE` on the resource's SQL warehouse. If the view is missing, it is removed from state, so the next apply recreates it. |
 | Update | `ALTER VIEW <catalog.schema.name> AS $$ <definition> $$` on the resource's SQL warehouse. This keeps grants and tags, which `CREATE OR REPLACE` would drop. |
 | Delete | `DROP VIEW IF EXISTS <catalog.schema.name>` on the resource's SQL warehouse |
 | Import | `terraform import databricks_metric_view.x catalog.schema.view_name` |
