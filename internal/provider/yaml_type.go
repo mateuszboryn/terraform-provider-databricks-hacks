@@ -51,7 +51,7 @@ func (t YAMLType) ValueFromTerraform(ctx context.Context, in tftypes.Value) (att
 func (t YAMLType) ValueType(_ context.Context) attr.Value { return YAMLValue{} }
 
 // YAMLValue holds a YAML document. Semantic equality makes Terraform keep the prior value
-// (no diff) when config / remote YAML differ only in formatting:
+// (no diff) when config / remote YAML differ only in formatting or comments:
 //   - during plan: prior state vs. configuration
 //   - during refresh: prior state vs. value read from the workspace
 type YAMLValue struct {

@@ -209,6 +209,28 @@ func (r *metricViewResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), fullName)...)
 }
 
+// ModifyPlan prints a readable diff of the normalized YAML when an update is planned,
+// because Terraform's own diff shows the raw (differently formatted) strings.
+func (r *metricViewResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return // create or destroy
+	}
+	var state, plan metricViewModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Definition.IsUnknown() || plan.Definition.IsNull() {
+		return
+	}
+	diff, err := YAMLDiff(state.Definition.ValueString(), plan.Definition.ValueString())
+	//if err != nil || diff == "" || len(strings.Split(diff, "\n")) > 100 {
+	if err != nil || diff == "" {
+		return
+	}
+	resp.Diagnostics.AddWarning(
+		"Metric view definition change: "+metricViewFullName(plan),
+		"Normalized YAML diff (- workspace/state, + configuration):\n\n"+diff)
+}
+
 // ---------- helpers ----------
 
 var namePartRe = regexp.MustCompile("^[^.`]+$")

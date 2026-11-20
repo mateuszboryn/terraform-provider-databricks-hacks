@@ -13,7 +13,7 @@ import (
 )
 
 func normalizeViewDefinition(s string) string {
-	return strings.Trim(s, " \n\r\t")
+	return strings.Trim(s, " \n\r\t;")
 }
 
 type viewDefinitionType struct {

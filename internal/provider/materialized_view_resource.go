@@ -678,7 +678,7 @@ func parseMaterializedViewDDL(ddl string) (materializedViewDDL, error) {
 	if asIndex < 0 {
 		return result, fmt.Errorf("materialized view DDL has no top-level AS query clause")
 	}
-	result.ViewDefinition = normalizeViewDefinition(strings.TrimSuffix(normalizeViewDefinition(ddl[tokens[asIndex].end:]), ";"))
+	result.ViewDefinition = normalizeViewDefinition(ddl[tokens[asIndex].end:])
 	if result.ViewDefinition == "" {
 		return result, fmt.Errorf("materialized view DDL has an empty query")
 	}
