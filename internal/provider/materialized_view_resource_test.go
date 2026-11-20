@@ -268,13 +268,13 @@ func TestParseMaterializedViewDDLTriggerAndClusterAuto(t *testing.T) {
 	}
 }
 
-func TestParseMaterializedViewImportID(t *testing.T) {
-	warehouse, name, ok := parseMaterializedViewImportID("warehouse-1|main.analytics.daily_view")
+func TestParseViewImportID(t *testing.T) {
+	warehouse, name, ok := parseViewImportID("warehouse-1|main.analytics.daily_view")
 	if !ok || warehouse != "warehouse-1" || name != "main.analytics.daily_view" {
 		t.Fatalf("unexpected import ID parse: %q, %q, %t", warehouse, name, ok)
 	}
 	for _, invalid := range []string{"main.analytics.daily_view", "|main.analytics.daily_view", "warehouse|main.analytics", "warehouse|main..view", "warehouse|main.schema.view.extra"} {
-		if _, _, ok := parseMaterializedViewImportID(invalid); ok {
+		if _, _, ok := parseViewImportID(invalid); ok {
 			t.Errorf("expected import ID %q to be rejected", invalid)
 		}
 	}

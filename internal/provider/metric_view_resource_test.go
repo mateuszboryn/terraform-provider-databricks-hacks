@@ -9,11 +9,13 @@ import (
 	"testing"
 
 	"github.com/databricks/databricks-sdk-go"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 func TestProviderSchemaDoesNotRequireWarehouse(t *testing.T) {
@@ -112,6 +114,42 @@ func TestMetricViewImportNameParts(t *testing.T) {
 		if _, ok := splitFullName(invalid); ok {
 			t.Errorf("expected import ID %q to be rejected", invalid)
 		}
+	}
+}
+
+func TestViewImportState(t *testing.T) {
+	ctx := context.Background()
+	for _, test := range []struct {
+		name string
+		view resource.Resource
+	}{
+		{"metric", NewMetricViewResource()},
+		{"materialized", NewMaterializedViewResource()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var schemaResp resource.SchemaResponse
+			test.view.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+			for _, id := range []string{"warehouse-1|main.analytics.daily_view", "main.analytics.daily_view", "|main.analytics.daily_view", "warehouse-1|main..view"} {
+				state := tfsdk.State{Schema: schemaResp.Schema, Raw: tftypes.NewValue(schemaResp.Schema.Type().TerraformType(ctx), nil)}
+				resp := resource.ImportStateResponse{State: state}
+				test.view.(resource.ResourceWithImportState).ImportState(ctx, resource.ImportStateRequest{ID: id}, &resp)
+				if id != "warehouse-1|main.analytics.daily_view" {
+					if !resp.Diagnostics.HasError() {
+						t.Errorf("expected import %q to fail", id)
+					}
+					continue
+				}
+				if resp.Diagnostics.HasError() {
+					t.Fatalf("import %q: %v", id, resp.Diagnostics)
+				}
+				for key, want := range map[string]string{"warehouse_id": "warehouse-1", "catalog_name": "main", "schema_name": "analytics", "name": "daily_view", "id": "main.analytics.daily_view"} {
+					var got types.String
+					if diags := resp.State.GetAttribute(ctx, path.Root(key), &got); diags.HasError() || got.ValueString() != want {
+						t.Errorf("%s: got %q, diagnostics %v; want %q", key, got.ValueString(), diags, want)
+					}
+				}
+			}
+		})
 	}
 }
 

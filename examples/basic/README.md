@@ -36,6 +36,6 @@ The development override loads `databricks-hacks` from the local binary; `terraf
    `terraform plan` detects the drift and shows the update that restores the code version.
 5. **Delete**: `terraform destroy`, or remove the resource block and apply. This runs `DROP VIEW IF EXISTS`.
 6. **Import an existing view** (keep the warehouse lookup and resource `warehouse_id` configured):
-   `terraform import databricks_metric_view.sample_2 sample_workspace.wh_playground.tf_mv_sample_2`
+   `terraform import databricks_metric_view.sample_2 'warehouse-id|sample_workspace.wh_playground.tf_mv_sample_2'`
 
 Note: creating views in `wh_playground` requires CREATE TABLE privilege on the schema (environment rules apply: in prod, BI is read-only on warehouse).

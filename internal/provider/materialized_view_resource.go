@@ -365,7 +365,7 @@ func (r *materializedViewResource) Delete(ctx context.Context, req resource.Dele
 }
 
 func (r *materializedViewResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	warehouseID, fullName, ok := parseMaterializedViewImportID(req.ID)
+	warehouseID, fullName, ok := parseViewImportID(req.ID)
 	if !ok {
 		resp.Diagnostics.AddError("Invalid materialized view import ID", "Expected warehouse_id|catalog.schema.name, got: "+req.ID)
 		return
@@ -382,7 +382,7 @@ func materializedViewFullName(model materializedViewModel) string {
 	return strings.Join([]string{model.CatalogName.ValueString(), model.SchemaName.ValueString(), model.Name.ValueString()}, ".")
 }
 
-func parseMaterializedViewImportID(id string) (string, string, bool) {
+func parseViewImportID(id string) (string, string, bool) {
 	parts := strings.SplitN(id, "|", 2)
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 		return "", "", false

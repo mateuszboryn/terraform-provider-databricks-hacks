@@ -23,9 +23,9 @@ Provider arguments: `host`, `token`, and `profile` are optional and use Databric
 | Read / refresh | Checks the object through the Unity Catalog Tables API, then reads its YAML from `SHOW CREATE TABLE` on the resource's SQL warehouse. If the view is missing, it is removed from state, so the next apply recreates it. |
 | Update | `ALTER VIEW <catalog.schema.name> AS $$ <definition> $$` on the resource's SQL warehouse. This keeps grants and tags, which `CREATE OR REPLACE` would drop. |
 | Delete | `DROP VIEW IF EXISTS <catalog.schema.name>` on the resource's SQL warehouse |
-| Import | `terraform import databricks_metric_view.x catalog.schema.view_name` |
+| Import | `terraform import databricks_metric_view.x 'warehouse-id|catalog.schema.view_name'` |
 
-Changing `warehouse_id` updates the resource's warehouse setting without replacing the view. Changes to the catalog, schema, or view name replace it. Imports keep the `catalog.schema.name` ID format; configure `warehouse_id` on the resource before importing.
+Changing `warehouse_id` updates the resource's warehouse setting without replacing the view. Changes to the catalog, schema, or view name replace it. Imports require `warehouse_id|catalog.schema.name`; the resource ID remains `catalog.schema.name`.
 
 ## Change detection (normalized YAML diff)
 
@@ -58,7 +58,7 @@ Then use `examples/basic` (see its README).
 
 ## Migration from provider-level warehouse configuration
 
-Remove `warehouse_id` from the provider block and add it to each `databricks_metric_view` resource. Split each previous three-part `name` into `catalog_name`, `schema_name`, and the final `name` component. Existing IDs and import IDs remain `catalog.schema.name`.
+Remove `warehouse_id` from the provider block and add it to each `databricks_metric_view` resource. Split each previous three-part `name` into `catalog_name`, `schema_name`, and the final `name` component. Existing resource IDs remain `catalog.schema.name`; imports require `warehouse_id|catalog.schema.name`.
 
 ## Layout
 

@@ -196,15 +196,17 @@ func (r *metricViewResource) Delete(ctx context.Context, req resource.DeleteRequ
 }
 
 func (r *metricViewResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	parts, ok := splitFullName(req.ID)
+	warehouseID, fullName, ok := parseViewImportID(req.ID)
 	if !ok {
-		resp.Diagnostics.AddError("Invalid metric view import ID", "Expected catalog.schema.name, got: "+req.ID)
+		resp.Diagnostics.AddError("Invalid metric view import ID", "Expected warehouse_id|catalog.schema.name, got: "+req.ID)
 		return
 	}
+	parts, _ := splitFullName(fullName)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("warehouse_id"), warehouseID)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("catalog_name"), parts[0])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("schema_name"), parts[1])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("name"), parts[2])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), fullName)...)
 }
 
 // ---------- helpers ----------

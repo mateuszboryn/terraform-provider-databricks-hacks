@@ -80,10 +80,10 @@ resource "databricks_metric_view" "example" {
 
 ## Import
 
-Import with the fully qualified name. The resource configuration must also provide `warehouse_id`:
+Include the warehouse ID and fully qualified name in the import ID:
 
 ```shell
-terraform import databricks_metric_view.example main.analytics.revenue_by_day
+terraform import databricks_metric_view.example 'warehouse-id|main.analytics.revenue_by_day'
 ```
 
 ## Definition comparison
