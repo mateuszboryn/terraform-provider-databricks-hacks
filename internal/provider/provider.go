@@ -92,7 +92,7 @@ func (p *metricViewProvider) Configure(ctx context.Context, req provider.Configu
 }
 
 func (p *metricViewProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewMetricViewResource, NewMaterializedViewResource}
+	return []func() resource.Resource{NewMetricViewResource, NewMaterializedViewResource, NewPageResource}
 }
 
 func (p *metricViewProvider) DataSources(_ context.Context) []func() datasource.DataSource {

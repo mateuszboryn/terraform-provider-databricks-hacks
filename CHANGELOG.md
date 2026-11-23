@@ -1,3 +1,8 @@
+## 0.1.8
+
+FEATURES:
+- new resource `databricks_page` (Knowledge pages)
+
 ## 0.1.7
 
 FEATURES:
