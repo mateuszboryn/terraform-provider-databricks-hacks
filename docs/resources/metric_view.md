@@ -22,6 +22,7 @@ terraform {
     }
     databricks-hacks = {
       source = "mateuszboryn/databricks-hacks"
+      version = "~> 0.1.10"
     }
   }
 }

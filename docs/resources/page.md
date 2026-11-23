@@ -12,8 +12,40 @@ Manages a Databricks Knowledge page: a markdown document that belongs to a domai
 ## Example Usage
 
 ```terraform
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    databricks = {
+      source  = "databricks/databricks"
+      version = "~> 1.132"
+    }
+    databricks-hacks = {
+      source = "mateuszboryn/databricks-hacks"
+      version = "~> 0.1.10"
+    }
+  }
+}
+
+provider "databricks" {
+  host = "https://your-workspace.azuredatabricks.net"
+}
+
+provider "databricks-hacks" {
+  host = "https://your-workspace.azuredatabricks.net"
+}
+
+data "databricks_domains" "all" {
+}
+
+locals {
+  sample_domain = [
+    for d in data.databricks_domains.all.domains: d if d.tag_key == "Sample domain name"
+  ][0]
+}
+
 resource "databricks_page" "revenue" {
-  domain       = "domains/0123456789abcdef"
+  provider     = databricks-hacks
+  domain       = local.sample_domain.name
   display_name = "Revenue"
   description  = "How revenue is defined and reported"
   synonyms     = ["sales", "income"]
