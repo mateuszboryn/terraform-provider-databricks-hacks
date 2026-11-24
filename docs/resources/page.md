@@ -84,6 +84,8 @@ resource "databricks_page" "revenue" {
 - Update sends `PATCH` with an `update_mask` that lists only the changed attributes. Every attribute, including `domain`, is updated in place.
 - Delete sends `DELETE /api/2.0/knowledge/pages/{page_id}`.
 
+To add Sources and Related assets to a page, use [`databricks_page_asset_link`](page_asset_link.md).
+
 Page ownership (`owner_ids`) is not managed. The page is owned by the identity Terraform authenticates as.
 
 ## Import

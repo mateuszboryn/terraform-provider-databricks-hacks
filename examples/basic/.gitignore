@@ -1,0 +1,4 @@
+metric_views/*/*.yaml
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl

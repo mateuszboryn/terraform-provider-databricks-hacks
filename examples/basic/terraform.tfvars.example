@@ -1,5 +1,6 @@
 # Copy to terraform.tfvars and fill in.
 databricks_host = "https://<your-workspace>.azuredatabricks.net"
 warehouse_name  = "<sql-warehouse-name>"
-catalog         = "sample_workspace"
-schema          = "wh_playground"
+catalog_name    = "sample_workspace"
+schema_name     = "wh_playground"
+domain_tag_key  = "<domain-tag-key>"

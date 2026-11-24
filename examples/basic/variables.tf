@@ -3,19 +3,24 @@ variable "databricks_host" {
   type        = string
 }
 
+variable "databricks_account_id" {
+  description = "uuid-like"
+  type        = string
+}
+
 variable "warehouse_name" {
   description = "Name of the SQL warehouse looked up by the official Databricks provider"
   type        = string
 }
 
-variable "catalog" {
+variable "catalog_name" {
   description = "Catalog for source tables and metric views (env_region, e.g. sample_workspace)"
   type        = string
-  default     = "sample_workspace"
 }
 
-variable "schema" {
+variable "schema_name" {
   description = "Schema where metric views are created"
   type        = string
-  default     = "wh_playground"
 }
+
+variable "domain_tag_key" {}

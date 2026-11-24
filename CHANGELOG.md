@@ -1,3 +1,8 @@
+## 0.1.11
+
+FEATURES:
+- new resource `databricks_page_asset_link` (links from Knowledge pages to assets)
+
 ## 0.1.8
 
 FEATURES:
